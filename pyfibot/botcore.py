@@ -38,7 +38,7 @@ class CoreCommands(object):
                  (self.factory.getNick(user), self.pingAve * 100.0))
 
     def command_rehash(self, user, channel, args):
-        """Reload modules and optionally the configuration file. Usage: rehash [conf]"""
+        """Reload modules and optionally the configuration file. Usage: rehash"""
 
         if self.factory.isAdmin(user):
             try:
@@ -46,10 +46,7 @@ class CoreCommands(object):
                 log.info("rebuilding %r" % self)
                 rebuild.updateInstance(self)
 
-                # reload config file
-                if args == 'conf':
-                    self.factory.reload_config()
-                    self.say(channel, 'Configuration reloaded.')
+                self.factory.reload_config()
 
                 # unload removed modules
                 self.factory._unload_removed_modules()
