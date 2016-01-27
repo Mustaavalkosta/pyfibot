@@ -18,7 +18,6 @@ global shortener_service
 global shortener
 api_key = None
 shortener_service = 'GoogleShortener'
-shortener = None
 
 def init(bot, testing=False):
     ''' Initialize updater '''
@@ -42,7 +41,6 @@ def init(bot, testing=False):
     api_key = config.get('api_key', api_key)
 
     if api_key:
-        shortener = Shortener(shortener_service, api_key=api_key)
         logger.info("Using shortener service {0} with API key {1}".format(shortener_service, api_key))
     else:
         logger.warning("Google API key not found from config!")
@@ -193,7 +191,6 @@ class Feed(object):
     ''' Feed object to simplify feed handling '''
     def __init__(self, network, channel, id=None, url=None):
         # Not sure if (this complex) init is needed...
-        global shortener
         self.id = id
         self.network = network
         self.channel = channel
@@ -201,6 +198,8 @@ class Feed(object):
 
         if url:
             self.url = url
+
+
         self.initialized = False
         # load feed details from database
         self._get_feed_from_db()
@@ -236,9 +235,17 @@ class Feed(object):
 
     def __parse_feed(self):
         ''' Parse items from feed '''
+        global api_key
+        global shortener_service
         f = feedparser.parse(self.url)
         if self.initialized:
             self.update_feed_info({'name': f['channel']['title']})
+
+        if api_key:
+            shortener = Shortener(shortener_service, api_key=api_key)
+        else:
+            shortener = None
+
         items = []
         for i in f['items']:
             # Retry 10 times for goo.gl API
