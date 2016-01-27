@@ -33,6 +33,7 @@ lib64
 local
 .cache/
 .eggs/
+pip-selfcheck.json
 
 # Installer logs
 pip-log.txt
