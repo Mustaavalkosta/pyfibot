@@ -6,7 +6,6 @@ from threading import Thread
 import twisted.internet.error
 import logging
 from pyshorteners import Shortener
-from requests import exceptions
 
 logger = logging.getLogger('module_rss')
 DATABASE = None
@@ -247,10 +246,10 @@ class Feed(object):
                 try:
                     items.append({
                         'title': i['title'],
-                        'link': shortener.short(i['link']) if shortener is not None else i['link'],
+                        'link': shortener.short(i['link']) if shortener else i['link'],
                     })
-                except exceptions.ReadTimeout:
-                    logger.debug('Shortener service read timeout reached.')
+                except Exception as e:
+                    logger.debug("Shortener threw exception {}".format(e.message))
                     continue
                 break
         return (f, items)
