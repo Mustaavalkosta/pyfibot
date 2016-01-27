@@ -19,3 +19,4 @@ service_identity
 python-dateutil >= 2.2
 pytz
 pytvmaze
+pyshorteners

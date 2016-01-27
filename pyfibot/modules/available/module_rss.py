@@ -5,7 +5,7 @@ from twisted.internet.reactor import callLater
 from threading import Thread
 import twisted.internet.error
 import logging
-
+from pyshorteners import Shortener
 
 logger = logging.getLogger('module_rss')
 DATABASE = None
@@ -13,6 +13,12 @@ updater = None
 botref = None
 config = {}
 
+global api_key
+global shortener_service
+global shortener
+api_key = None
+shortener_service = GoogleShortener
+shortener = None
 
 def init(bot, testing=False):
     ''' Initialize updater '''
@@ -21,6 +27,9 @@ def init(bot, testing=False):
     global botref
     global updater
     global logger
+    global api_key
+    global shortener_service
+    global shortener
 
     if testing:
         DATABASE = dataset.connect('sqlite:///:memory:')
@@ -29,7 +38,15 @@ def init(bot, testing=False):
 
     logger.info('RSS module initialized')
     botref = bot
-    config = bot.config.get('rss', {})
+    config = bot.config.get('module_rss', {})
+    api_key = config.get('api_key', api_key)
+
+    if api_key:
+        shortener = Shortener(shortener_service, api_key=api_key)
+        logger.info("Using shortener service {0} with API key {1}".format(shortener_service, api_key))
+    else:
+        logger.warning("Google API key not found from config!")
+
     finalize()
     # As there's no signal if this is a rehash or restart
     # update feeds in 30 seconds
@@ -176,6 +193,7 @@ class Feed(object):
     ''' Feed object to simplify feed handling '''
     def __init__(self, network, channel, id=None, url=None):
         # Not sure if (this complex) init is needed...
+        global shortener
         self.id = id
         self.network = network
         self.channel = channel
@@ -223,7 +241,7 @@ class Feed(object):
             self.update_feed_info({'name': f['channel']['title']})
         items = [{
             'title': i['title'],
-            'link': i['link'],
+            'link': shortener.short(i['link']) if shortener is not None else i['link'],
         } for i in f['items']]
         return (f, items)
 

@@ -127,3 +127,7 @@ module_wolfram_alpha:
 module_posti:
   # Language selection for posti
   language: en
+
+module_rss:
+  # API key for goo.gl shortener service.
+  api_key: abcdefg
