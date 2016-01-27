@@ -6,6 +6,7 @@ from threading import Thread
 import twisted.internet.error
 import logging
 from pyshorteners import Shortener
+from requests import exceptions
 
 logger = logging.getLogger('module_rss')
 DATABASE = None
@@ -17,7 +18,7 @@ global api_key
 global shortener_service
 global shortener
 api_key = None
-shortener_service = GoogleShortener
+shortener_service = 'GoogleShortener'
 shortener = None
 
 def init(bot, testing=False):
@@ -239,10 +240,19 @@ class Feed(object):
         f = feedparser.parse(self.url)
         if self.initialized:
             self.update_feed_info({'name': f['channel']['title']})
-        items = [{
-            'title': i['title'],
-            'link': shortener.short(i['link']) if shortener is not None else i['link'],
-        } for i in f['items']]
+        items = []
+        for i in f['items']:
+            # Retry 10 times for goo.gl API
+            for j in range(0,10):
+                try:
+                    items.append({
+                        'title': i['title'],
+                        'link': shortener.short(i['link']) if shortener is not None else i['link'],
+                    })
+                except exceptions.ReadTimeout:
+                    logger.debug('Shortener service read timeout reached.')
+                    continue
+                break
         return (f, items)
 
     def __save_item(self, item, table=None):
