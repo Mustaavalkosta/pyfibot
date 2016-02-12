@@ -6,6 +6,7 @@ from threading import Thread
 import twisted.internet.error
 import logging
 from pyshorteners import Shortener
+from repoze.lru import LRUCache
 
 logger = logging.getLogger('module_rss')
 DATABASE = None
@@ -14,10 +15,14 @@ botref = None
 config = {}
 
 global api_key
+global cache
 global shortener_service
-global shortener
+
 api_key = None
 shortener_service = 'GoogleShortener'
+
+# Caching for short urls
+cache = LRUCache(10)
 
 def init(bot, testing=False):
     ''' Initialize updater '''
@@ -199,7 +204,6 @@ class Feed(object):
         if url:
             self.url = url
 
-
         self.initialized = False
         # load feed details from database
         self._get_feed_from_db()
@@ -235,31 +239,13 @@ class Feed(object):
 
     def __parse_feed(self):
         ''' Parse items from feed '''
-        global api_key
-        global shortener_service
         f = feedparser.parse(self.url)
         if self.initialized:
             self.update_feed_info({'name': f['channel']['title']})
-
-        if api_key:
-            shortener = Shortener(shortener_service, api_key=api_key)
-        else:
-            shortener = None
-
-        items = []
-        for i in f['items']:
-            # Retry 3 times for goo.gl API
-            for j in range(0,3):
-                try:
-                    short_url = shortener.short(i['link']) if shortener else None
-                except Exception as e:
-                    logger.debug("Shortener threw exception {}".format(e.message))
-                    continue
-                break
-            items.append({
-                'title': i['title'],
-                'link': short_url if short_url is not None else i['link'],
-            })
+        items = [{
+            'title': i['title'],
+            'link': i['link'],
+        } for i in f['items']]
         return (f, items)
 
     def __save_item(self, item, table=None):
@@ -298,7 +284,37 @@ class Feed(object):
         return feed
 
     def get_item_str(self, item):
-        return '[%s] %s <%s>' % (''.join([c for c in self.name][0:18]), item['title'], item['link'])
+        global api_key
+        global cache
+        global shortener_service
+
+        if api_key:
+            shortener = Shortener(shortener_service, api_key=api_key)
+        else:
+            shortener = None
+
+        short_url = None
+        if cache is not None:
+            short_url = cache.get(item['link'])
+        if short_url is None:
+            # Retry 3 times for goo.gl API
+            for i in range(0,3):
+                try:
+                    short_url = shortener.short(item['link'])
+                    if short_url is not None:
+                        logger.debug("Saving short url to cache")
+                        cache.put(item['link'], short_url)
+                except Exception as e:
+                    logger.debug("Shortener threw exception {}".format(e.message))
+                    continue
+                break
+        else:
+            logger.debug("Short url cache hit")
+        if short_url is None:
+            url = item['link']
+        else:
+            url = short_url
+        return '[%s] %s <%s>' % (''.join([c for c in self.name][0:18]), item['title'], url)
 
     def get_latest(self):
         tbl = self.__get_items_tbl()
@@ -368,10 +384,3 @@ class Feed(object):
         items = self.get_new_items(True)
         for i in items:
             bot_instance.say(self.channel, self.get_item_str(i))
-
-
-if __name__ == '__main__':
-    f = Feed('ircnet', '#pyfibot', 'http://feeds.feedburner.com/ampparit-kaikki?format=xml')
-    f.read()
-    for i in f.get_new_items(True):
-        print(i)
