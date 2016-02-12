@@ -248,17 +248,18 @@ class Feed(object):
 
         items = []
         for i in f['items']:
-            # Retry 10 times for goo.gl API
-            for j in range(0,10):
+            # Retry 3 times for goo.gl API
+            for j in range(0,3):
                 try:
-                    items.append({
-                        'title': i['title'],
-                        'link': shortener.short(i['link']) if shortener else i['link'],
-                    })
+                    short_url = shortener.short(i['link']) if shortener else None
                 except Exception as e:
                     logger.debug("Shortener threw exception {}".format(e.message))
                     continue
                 break
+            items.append({
+                'title': i['title'],
+                'link': short_url if short_url is not None else i['link'],
+            })
         return (f, items)
 
     def __save_item(self, item, table=None):
