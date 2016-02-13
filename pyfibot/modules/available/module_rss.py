@@ -221,6 +221,8 @@ class Feed(object):
             'channel': self.channel,
             'url': self.url,
             'name': '',
+            'etag': '',
+            'modified': '',
         })
         # Update feed to match the created
         feed = self._get_feed_from_db()
@@ -239,13 +241,51 @@ class Feed(object):
 
     def __parse_feed(self):
         ''' Parse items from feed '''
-        f = feedparser.parse(self.url)
+        if self.etag is not None:
+            f = feedparser.parse(self.url, etag=self.etag)
+        elif self.modified is not None:
+            f = feedparser.parse(self.url, modified=self.modified)
+        else:
+            f = feedparser.parse(self.url)
+
+        feed_changed = False
+
+        etag = None
+        try:
+            if self.etag != f.etag:
+                etag = f.etag
+                feed_changed = True
+        except Exception as e:
+            logger.debug("FeedParser threw exception: {}".format(e.message))
+
+        modified = None
+        try:
+            if self.modified != f.modified:
+                modified = f.modified
+                feed_changed = True
+        except Exception as e:
+            logger.debug("FeedParser threw exception: {}".format(e.message))
+
         if self.initialized:
-            self.update_feed_info({'name': f['channel']['title']})
-        items = [{
-            'title': i['title'],
-            'link': i['link'],
-        } for i in f['items']]
+            self.update_feed_info({
+                'name': f['channel']['title'],
+                'etag': etag,
+                'modified': modified,
+            })
+        elif feed_changed:
+            self.update_feed_info({
+                'etag': etag,
+                'modified': modified,
+            })
+
+        if f.status == 304:
+            logger.debug("Feed {} hasn't changed since last update".format(self.name))
+            items = []
+        else:
+            items = [{
+                'title': i['title'],
+                'link': i['link'],
+            } for i in f['items']]
         return (f, items)
 
     def __save_item(self, item, table=None):
@@ -281,6 +321,8 @@ class Feed(object):
         self.url = feed['url']
         # TODO: Name could just be the domain part of url?
         self.name = feed['name']
+        self.etag = feed['etag']
+        self.modified = feed['modified']
         return feed
 
     def get_item_str(self, item):
